@@ -21,98 +21,65 @@ def get_exchange_rates():
     except:
         return 0.02, 0.075, 0.073
 
+def clean_channel_username(username: str) -> str:
+    username = username.strip()
+    if username.startswith("https://t.me/"):
+        username = username.replace("https://t.me/", "")
+    elif username.startswith("t.me/"):
+        username = username.replace("t.me/", "")
+    if not username.startswith("@"):
+        username = "@" + username
+    return username
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "👋 أهلاً بك في بوت نشر وتعديل عروض الحسابات!\n\n"
-        "⚙️ **طريقة الاستخدام:**\n"
-        "1️⃣ أضف البوت **مشرفاً (Admin)** في قناتك مع صلاحية نشر الرسائل.\n"
-        "2️⃣ أرسل لي هنا معرف قناتك بـ `@` (مثال: `@my_pubg_shop`).\n"
-        "3️⃣ حول لي أي عرض (فيديو / صورة / نص)، وسأقوم بنشره في قناتك فوراً وبدون أي إشارة للمصدر الأصلي! 🚀"
+    welcome_text = (
+        "أهلاً بك في بوت تنسيق عروض PUBG! 🎮✨\n\n"
+        "أرسل يوزر قناتك أولاً (مثال: @mychannel أو رابط القناة) لتخزينه."
     )
+    await update.message.reply_text(welcome_text)
 
-async def set_channel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    msg_text = update.message.text.strip()
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text
     user_id = update.message.from_user.id
 
-    if msg_text.startswith("@") or msg_text.startswith("-100"):
-        user_channels[user_id] = msg_text
-        await update.message.reply_text(
-            f"✅ تم ربط قناتك بنجاح: **{msg_text}**\n\n"
-            f"الآن حول لي أي عرض وسأقوم بنشره في قناتك فوراً!"
-        )
-    else:
-        await handle_post(update, context)
+    if text.startswith("@") or "t.me/" in text:
+        channel = clean_channel_username(text)
+        user_channels[user_id] = channel
+        await update.message.reply_text(f"تم حفظ القناة: {channel}\nالآن أرسل العرض لتنسيقه!")
+        return
 
-async def handle_post(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.message.from_user.id
-    
     if user_id not in user_channels:
-        await update.message.reply_text(
-            "⚠️ لم تقم بربط قناتك بعد!\n"
-            "الرجاء إرسال يوزر قناتك أولاً (مثال: `@my_channel`) حتى أعرف أين أنشر العروض."
-        )
+        await update.message.reply_text("الرجاء إرسال يوزر القناة أولاً قبل إرسال العروض!")
         return
 
-    target_channel = user_channels[user_id]
-    msg = update.message
-    original_text = msg.text or msg.caption or ""
-
-    if not original_text:
-        await update.message.reply_text("⚠️ الرسالة لا تحتوي على تفاصيل أو سعر!")
-        return
-
-    # البحث عن السعر بالجنيه واستخراج قيمته
-    match = re.search(r'(?:السعر\s*::\s*|السعر\s*:?\s*)?(\d+)\s*ج', original_text)
+    channel = user_channels[user_id]
     
+    # البحث عن السعر بالجنيه المصري
+    match = re.search(r'(\d+)\ (جنيه|ج.م|EGP)', text)
     if match:
-        price_egp = float(match.group(1))
+        egp_price = float(match.group(1))
         usd_rate, sar_rate, aed_rate = get_exchange_rates()
         
-        price_usd = round(price_egp * usd_rate, 1)
-        price_sar = round(price_egp * sar_rate, 1)
-        price_aed = round(price_egp * aed_rate, 1)
+        usd_price = round(egp_price * usd_rate, 2)
+        sar_price = round(egp_price * sar_rate, 2)
+        aed_price = round(egp_price * aed_rate, 2)
 
-        extra_rates = (
-            f"\n\n💵 الدولار :: {price_usd} $"
-            f"\n🇸🇦 الريال السعودي :: {price_sar} ر.س"
-            f"\n🇦🇪 الدرهم الإماراتي :: {price_aed} د.إ"
+        formatted_text = (
+            f"{text}\n\n"
+            f"💵 الأسعار بالعملات الأخرى:\n"
+            f"• بالدولار: ${usd_price}\n"
+            f"• بالريال السعودي: {sar_price} SAR\n"
+            f"• بالدرهم الإماراتي: {aed_price} AED\n\n"
+            f"شرفنا في القناة: {channel}"
         )
-        updated_text = original_text + extra_rates
+        await update.message.reply_text(formatted_text)
     else:
-        updated_text = original_text
+        await update.message.reply_text(f"{text}\n\nشرفنا في القناة: {channel}")
 
-    # إعادة نشر الوسائط بدون إشارة للمصدر الأصلي
-    try:
-        if msg.video:
-            await context.bot.send_video(
-                chat_id=target_channel,
-                video=msg.video.file_id,
-                caption=updated_text
-            )
-        elif msg.photo:
-            await context.bot.send_photo(
-                chat_id=target_channel,
-                photo=msg.photo[-1].file_id,
-                caption=updated_text
-            )
-        else:
-            await context.bot.send_message(
-                chat_id=target_channel,
-                text=updated_text
-            )
-
-        await msg.reply_text(f"🎉 تم نشر العرض بنجاح في قناتك ({target_channel})!")
-    except Exception as e:
-        await msg.reply_text(
-            f"❌ تعذر النشر في القناة ({target_channel}).\n"
-            f"تأكد أنك أضفت البوت مشرفاً (Admin) في القناة وأن المعرف صحيح!\nالخطأ: {e}"
-        )
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     app = ApplicationBuilder().token(BOT_TOKEN).build()
-    
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(MessageHandler(filters.TEXT & filters.Regex(r'^(@|-100)'), set_channel))
-    app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, handle_post))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
+    print("Bot is running...")
     app.run_polling()
