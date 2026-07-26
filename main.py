@@ -5,7 +5,7 @@ from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 
 # التوكن الخاص بك
-BOT_TOKEN = "8929230127:AAF1jKmtHMAlxLdWwckV12QoCuDkDITSJ-U"
+BOT_TOKEN = "8929230127:AAFmsUt6MS_j-sUDcOC3cmWbkd7ufOmLxOs"
 
 # ذاكرة لتخزين قناة كل مستخدم
 user_channels = {}
